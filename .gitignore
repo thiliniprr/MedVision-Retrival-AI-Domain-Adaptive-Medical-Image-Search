@@ -1,0 +1,8 @@
+notes.txt
+data/
+.venv/
+__pycache__/
+*.jpg
+*.png
+*.pt
+*.pth

@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+title: Medical Research LLM
+message: "If you use this project, please cite it using the metadata below."
+authors:
+  - family-names: Perera
+    given-names: Nadeesha
+  - family-names: Raittinen
+    given-names: Alli
+date-released: 2026
+version: 0.1.0
+license: Apache-2.0
+repository-code: https://github.com/GPT-Laboratory/SOLO_NextGen_Case-3-MedVision-Retrival-AI-Domain-Adaptive-Medical-Image-Search
