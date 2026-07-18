@@ -1,0 +1,23 @@
+# requirements.txt
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+datasets>=2.14.0
+faiss-cpu>=1.7.4
+Pillow>=10.0.0
+numpy>=1.24.0
+tqdm>=4.65.0
+scikit-learn>=1.3.0
+gradio>=4.0.0
+open-clip-torch>=2.23.0
+accelerate>=0.24.0
+wandb>=0.15.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+
+# VLM report generation (optional but recommended)
+qwen-vl-utils>=0.0.2
+accelerate>=0.25.0
+
+# Flash attention (optional, improves VLM speed)
+#pip install flash-attn --no-build-isolation
