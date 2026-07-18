@@ -142,7 +142,7 @@ class VLMConfig:
     load_in_8bit: bool = False
 
     # HuggingFace token for gated model access
-    hf_token: Optional[str] = "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"
+    hf_token: Optional[str] = ""
 
     # Local cache directory (inside project)
     local_model_dir: str = "./cache/huggingface"
