@@ -2,8 +2,9 @@
 
 A comprehensive pipeline for **medical image similarity retrieval** and **automated radiology report generation** built on CLIP fine-tuning, FAISS indexing, and Vision-Language Model (VLM) inference.
 
-The system fine-tunes OpenAI's CLIP on the [MIMIC-CXR](https://physionet.org/content/mimic-cxr/2.0.0/) chest X-ray dataset, builds a high-performance vector index for similarity search, and generates structured radiology reports using retrieval-augmented generation — either via template-based methods or through **llava-llama3:8b** served by [Ollama](https://ollama.com/).
+The system fine-tunes OpenAI's CLIP on the [MIMIC-CXR](https://physionet.org/content/mimic-cxr/2.0.0/) chest X-ray dataset, builds a high-performance vector index for similarity search, and generates structured radiology reports using retrieval-augmented generation — either via template-based methods, local MedGemma or through **llava-llama3:8b** served by [Ollama](https://ollama.com/).
 
+Web frontend built with Streamlit and a FastAPI backend provide a complete user interface for retrieval and report generation.
 ---
 
 ## 📐 System Architecture
@@ -49,13 +50,36 @@ The system fine-tunes OpenAI's CLIP on the [MIMIC-CXR](https://physionet.org/con
 
 ---
 
+## 📁 Project Structure
+
+```
+Finetuning_pipeline/
+├── api.py                        ← FastAPI backend (run this)
+├── app.py                        ← Streamlit frontend (run this)
+├── main_pipeline.py              ← Core pipeline logic
+├── config.py                     ← Configuration (VLMConfig, FAISSConfig etc.)
+├── clip_finetuner.py             ← CLIP fine-tuning
+├── faiss_index_builder.py        ← FAISS index construction
+├── retrieval_engine.py           ← Similarity search + re-ranking
+├── report_generator.py           ← Report generation orchestration
+├── vlm_report_generator.py       ← Local MedGemma VLM
+├── ollama_vlm_report_generator.py← Ollama VLM client
+├── dataset_loader.py             ← MIMIC-CXR dataset loading
+├── checkpoints/                  ← Fine-tuned CLIP model checkpoints
+├── faiss_index/                  ← FAISS index + metadata
+├── cache/                        ← HuggingFace model cache
+└── output/                       ← Generated reports + query log
+```
+
+---
+
 ## ⚙️ Installation
 
 ### 1. Clone & Install Dependencies
 
 ```bash
 git clone <repository-url>
-cd SOLO_NextGen_Case-3-MedVision-Retrival-AI-Domain-Adaptive-Medical-Image-Search
+cd SOLO_NextGen_Case-3-MedVision-Retrival-AI-Domain-Adaptive-Medical-Image-Search/Finetuning_pipeline
 
 pip install -r requirement.txt
 ```
@@ -63,15 +87,19 @@ pip install -r requirement.txt
 **Core dependencies:**
 
 | Package | Purpose |
-|---------|---------|
-| `torch`, `torchvision` | Deep learning framework |
-| `transformers` | CLIP model & tokenizers |
+|---|---|
+| `torch`, `torchvision` | Deep learning framework (≥ 2.4.0 required) |
+| `transformers` | CLIP + MedGemma models (≥ 5.0.0 required) |
+| `accelerate` | Model loading acceleration |
 | `datasets` | HuggingFace MIMIC-CXR loading |
 | `faiss-cpu` / `faiss-gpu` | Vector similarity search |
+| `fastapi`, `uvicorn` | Backend API server |
+| `streamlit` | Frontend web interface |
+| `python-multipart` | File upload handling |
 | `Pillow` | Image processing |
-| `matplotlib` | Visual report generation |
-| `requests` | Ollama HTTP communication |
-| `numpy`, `tqdm`, `logging` | Utilities |
+| `requests` | HTTP communication |
+| `numpy`, `tqdm` | Utilities |
+
 
 ### 2. Set Up Ollama for VLM Report Generation
 
@@ -95,7 +123,112 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 
 ---
 
-## 🚀 Usage
+## 🚀 Running the Application
+
+The application consists of two components that run simultaneously: the **backend API** (`api.py`) and the **frontend** (`app.py`). Both are run from the `Finetuning_pipeline/` folder.
+
+### Step 1 — Start the backend
+
+```bash
+# Template reports only (no GPU needed, fast startup)
+python api.py --no_auto_load
+
+# Local MedGemma VLM (requires GPU, downloads ~8 GB on first run)
+python api.py
+
+# 4-bit quantized MedGemma (lower VRAM)
+python api.py --vlm_4bit
+
+# Ollama backend
+python api.py --vlm_backend ollama --ollama_host http://localhost:11434
+
+# GPU cluster (allow remote connections)
+python api.py --host 0.0.0.0 --port 8000
+```
+
+The backend starts at `http://localhost:8000`. API documentation is available at `http://localhost:8000/docs`.
+
+### Step 2 — Start the frontend (new terminal)
+
+```bash
+streamlit run app.py
+```
+
+The frontend opens at `http://localhost:8501`.
+
+### Step 3 — Using the application
+
+1. **Upload** a chest X-ray (JPEG or PNG) in the Retrieval tab
+2. **Search** — click "Search Similar Cases" to query the FAISS index
+3. **Select** a report method in the sidebar
+4. **Generate** — switch to the Report Generation tab and click "Generate Report"
+5. **Feedback** — submit radiologist corrections via the feedback panel; logged to session history
+6. **Download** — export the report (.txt) or full session history (.csv) from the Session History tab
+
+---
+
+## 🖥️ Frontend Overview
+
+The Streamlit frontend (`app.py`) provides a professional interface for the full pipeline.
+
+### Tabs
+
+| Tab | Description |
+|---|---|
+| **Retrieval** | Upload X-ray, search the FAISS index, view similar cases with similarity scores |
+| **Report Generation** | Generate structured reports, view detected conditions, download results |
+| **Session History** | Browse all retrievals, reports and feedback; download as CSV |
+| **Platform Info** | System architecture, API reference, stack details |
+
+### Sidebar
+
+- **API Endpoint** — configure the backend URL (supports remote GPU cluster via SSH tunnel)
+- **Retrieval** — Top-K, minimum similarity score, query expansion, re-ranking toggles
+- **Report Method** — select from all available methods
+- **VLM Parameters** — temperature, max tokens, few-shot examples (shown for VLM methods only)
+- **MedGemma Model** — download, load and unload controls (shown when local VLM backend is active)
+- **Pipeline** — reload checkpoint and FAISS index at runtime
+- **Session Progress** — visual workflow tracker
+
+### Report Methods
+
+| Method | Description | GPU Required |
+|---|---|---|
+| `template` | Keyword analysis → structured FINDINGS/IMPRESSION | No |
+| `vlm_few_shot` | MedGemma with query image + retrieved images as context | Yes |
+| `vlm_zero_shot` | MedGemma, query image only | Yes |
+| `ollama_few_shot` | Ollama LLaVA with retrieved captions as context | Yes (remote) |
+| `ollama_zero_shot` | Ollama LLaVA, query image only | Yes (remote) |
+| `weighted` | Similarity-weighted blend of retrieved captions | No |
+| `majority` | Findings present in >50% of retrieved cases | No |
+| `concat` | Raw concatenation of retrieved captions | No |
+
+---
+
+## 🔌 API Reference
+
+The backend (`api.py`) exposes the following endpoints:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | Liveness check + VLM status |
+| `/api/status` | GET | Full pipeline diagnostics |
+| `/api/load` | POST | Reload checkpoint + FAISS index |
+| `/api/retrieve` | POST | FAISS similarity search |
+| `/api/generate-report` | POST | Retrieval + report generation |
+| `/api/feedback` | POST | Submit feedback + optional index update |
+| `/api/vlm/status` | GET | MedGemma download/load status |
+| `/api/vlm/download` | POST | Download MedGemma (~8 GB, once only) |
+| `/api/vlm/load` | POST | Pre-load model into GPU/CPU memory |
+| `/api/vlm/unload` | POST | Free model from memory |
+| `/api/index/append` | POST | Append new image-caption pairs to index |
+| `/api/index/build` | POST | Rebuild FAISS index from scratch |
+| `/api/gallery/{filename}` | GET | Serve generated gallery images |
+| `/api/feedback/log` | GET | Retrieve feedback log entries |
+
+---
+
+## 🔧 Pipeline Stages (CLI)
 
 The system operates in three sequential stages. Each stage can be run independently or together via the CLI.
 
@@ -103,6 +236,7 @@ The system operates in three sequential stages. Each stage can be run independen
 
 ### Stage 1: Fine-Tune CLIP on Medical Data
 
+The pipeline can also be run directly via `main_pipeline.py` without the frontend.
 Fine-tunes a pretrained CLIP model on MIMIC-CXR image–report pairs using symmetric contrastive learning. The fine-tuning adapts CLIP's vision and text encoders to the medical imaging domain.
 
 **What happens:**
@@ -422,16 +556,13 @@ IMPRESSION:
 
 ## ⚠️ Disclaimer
 
-This system is a **research prototype** for medical image retrieval and report generation. It is **not** a certified medical device and should **not** be used for clinical diagnosis. All generated reports require review by a qualified radiologist.
+This system is a **research prototype** for medical image retrieval and report generation. It is **not** a certified medical device and should **not** be used for clinical diagnosis. All generated reports require review by a qualified radiologist before any clinical use.
 
-## Authors
-This project was developed by:
+## 👥 Authors
 
-Nadeesha Perera
-Alli Raittinen
+**Nadeesha Perera · Alli Raittinen**
 
-If you use this work in research or products, please cite this repository
-and acknowledge the authors.
+If you use this work in research or products, please cite this repository and acknowledge the authors.
 
 
 ## License

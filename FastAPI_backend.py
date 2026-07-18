@@ -1,5 +1,5 @@
 # ====================
-# MedVision Backend
+# OLD MedVision Backend
 # ====================
 #
 # Project structure this file expects:
@@ -49,7 +49,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# ── Import your teammate's pipeline ──────────────────────────────────────────
+# ── Import main_pipeline ─────────────────────────────────────────────────────
 from Finetuning_pipeline.main_pipeline import MedicalImageRetrievalPipeline
 from Finetuning_pipeline.config import (
     PipelineConfig, ModelConfig, DatasetConfig,
@@ -93,7 +93,7 @@ config = PipelineConfig(
     output_dir=r"C:\Users\allir\Documents\GitHub\SOLO_NextGen_Case-3-MedVision-Retrival-AI-Domain-Adaptive-Medical-Image-Search\Finetuning_pipeline\output",
 )
 
-# 
+# Disable advanced retrieval features for faster queries in the demo. You can enable these in the frontend or here if you want to test them out.
 config.retrieval.use_query_expansion = False
 config.retrieval.use_reranking = False
 config.retrieval.use_multimodal_search = False
@@ -135,7 +135,7 @@ class QueryRequest(BaseModel):
     report_method: Optional[str] = "template"  # template | weighted | majority | concat
 
 class LoadRequest(BaseModel):
-    checkpoint: Optional[str] = "best_model"
+    checkpoint: Optional[str] = "final_model"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -147,6 +147,11 @@ def health():
     """Liveness check — Streamlit polls this to show the status badge."""
     return {"status": "ok"}
 
+
+# This endpoint serves the original dataset images by their index. 
+# The frontend can call this to display the retrieved cases. It loads the image 
+# from the dataset, converts it to JPEG format, and returns it as a streaming 
+# response. 
 @app.get("/images/case/{original_index}")
 def get_case_image(original_index: int):
     """Return a dataset image by its original index as JPEG."""
@@ -172,6 +177,11 @@ def get_case_image(original_index: int):
         raise HTTPException(status_code=404, detail=f"Could not load image {original_index}: {e}")
 
 
+# This endpoint allows the frontend to upload a new X-ray image. 
+# The backend saves it to disk and returns a unique image_id that the frontend 
+# can use for retrieval later. The image is stored in the uploads/ directory 
+# with a filename based on the generated UUID. The image_store dictionary keeps 
+# track of the mapping from image_id to file path for quick lookup during retrieval.
 @app.post("/images/upload")
 async def upload_image(file: UploadFile = File(...)):
     """
@@ -192,6 +202,10 @@ async def upload_image(file: UploadFile = File(...)):
     return {"image_id": image_id, "filename": file.filename}
 
 
+# This endpoint handles retrieval queries. 
+# It looks up the uploaded image by its image_id, runs the pipeline.query() 
+# method with the specified parameters, and returns the generated report 
+# along with similar cases to the frontend. 
 @app.post("/retrieval/query")
 def query(req: QueryRequest):
     """
